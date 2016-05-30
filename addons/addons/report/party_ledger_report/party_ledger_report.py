@@ -7,6 +7,7 @@ import frappe
 def execute(filters=None):
 	columns, data = ["Posting Date:Date:200","Name:Data:200","Total:Currency:200","Summary:Text:400","AWB No:Data:200","Type:Data:200","Voucher No:Data:200"], []
 	keyword=""
+	
 	if filters.get("name") and filters.get("name")!="":
 		keyword=filters.get("name")
 	if filters.get("type")=="Customer":
