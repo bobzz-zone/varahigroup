@@ -12,7 +12,7 @@ def execute(filters=None):
 	#	where gl.voucher_type IN ("Purchase Receipt","Delivery Note") and gl.debit>0 group by gl.voucher_no
 	#	""".format(filters.get("name")))
 	#if filters.get("type")=="All":
-	data=frappe.db.sql("""select dn.posting_date,dn.supplier_name,dn.base_grand_total,concat(group_concat(concat(di.item_code,"->",di.item_name,"=",di.qty)),dn.awb_no) ,"Delivery Note",dn.name
+	data=frappe.db.sql("""select dn.posting_date,dn.customer_name,dn.base_grand_total,concat(group_concat(concat(di.item_code,"->",di.item_name,"=",di.qty)),dn.awb_no) ,"Delivery Note",dn.name
 			from `tabDelivery Note` dn left join `tabDelivery Note Item` di on di.parent=dn.name 
 			where dn.posting_date between "{0}" and "{1}" and (dn.customer like "%{2}%" or dn.customer_name like "%{2}%") group by dn.name
 		""",as_dict=1)
