@@ -26,6 +26,6 @@ def execute(filters=None):
 				UNION
 				select pr.posting_date,pr.supplier_name,pr.base_grand_total,group_concat(pi.item_code," -> ",pi.item_name," = ",pi.qty), pr.awb_no,"Purchase Receipt",pr.name 
 				from `tabPurchase Receipt` pr left join `tabPurchase Receipt Item` pi on pi.parent=pr.name 
-				where pr.posting_date between "{0}" and "{1}" and (pr.supplier like "%{2}%" or pr.supplier_name like "%{2}%") group by pr.name ) order by posting_date
+				where pr.posting_date between "{0}" and "{1}" and (pr.supplier like "%{2}%" or pr.supplier_name like "%{2}%") group by pr.name ) gg order by gg.posting_date
 			""".format(filters.get("from"),filters.get("to"),keyword),as_list=1)
 	return columns, data
