@@ -15,5 +15,5 @@ def execute(filters=None):
 	data=frappe.db.sql("""select dn.posting_date,dn.customer_name,dn.base_grand_total,concat(group_concat(concat(di.item_code,"->",di.item_name,"=",di.qty)),dn.awb_no) ,"Delivery Note",dn.name
 			from `tabDelivery Note` dn left join `tabDelivery Note Item` di on di.parent=dn.name 
 			where dn.posting_date between "{0}" and "{1}" and (dn.customer like "%{2}%" or dn.customer_name like "%{2}%") group by dn.name
-		""".format(filters.get("from"),filters.get("to"),filters.get("name")),as_dict=1)
+		""".format(filters.from,filters.to,filters.name),as_dict=1)
 	return columns, data
