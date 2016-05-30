@@ -26,7 +26,8 @@ frappe.query_reports["Party Ledger Report"] = {
 			"fieldname":"type",
 			"label": __("Type"),
 			"fieldtype": "Select",
-			"options":["All","Customer","Supplier"]
+			"options":["All","Customer","Supplier"],
+			"default":"All"
 		}
 	]
 }
