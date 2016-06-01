@@ -80,7 +80,7 @@ def get_columns(filters):
 	columns += [
 		_("Voucher Type") + "::120", _("Voucher No") + ":Dynamic Link/"+_("Voucher Type")+":160",
 		_("Against Account") + "::120", _("Party Type") + "::80", _("Party") + "::150",
-		_("Cost Center") + ":Link/Cost Center:100", _("Remarks") + "::400" ,"Summary:Data:200","AWB No:Data:200"
+		_("Cost Center") + ":Link/Cost Center:100", _("Remarks") + "::400" ,"Summary:Data:200"
 	]
 
 	return columns
@@ -104,9 +104,9 @@ def get_gl_entries(filters):
 	if filters.get("party_type")=="Customer":
 		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
-				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no {select_fields}
+				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary {select_fields}
 			from `tabGL Entry` gl 
-			left join (select s.name,s.awb_no,group_concat(i.item_code,"(",i.product_code,") -> ",i.item_name," = ",.i.qty) as "summary" 
+			left join (select s.name,group_concat(i.item_code,"(",i.product_code,") -> ",i.item_name," = ",.i.qty) as "summary" 
 				from `tabSales Invoice` s 
 				join `tabSales Invoice Item` i on s.name=i.parent 
 				where s.docstatus=1 
@@ -281,7 +281,7 @@ def get_result_as_list(data, filters):
 			row += [d.get("debit_in_account_currency"), d.get("credit_in_account_currency")]
 
 		row += [d.get("voucher_type"), d.get("voucher_no"), d.get("against"),
-			d.get("party_type"), d.get("party"), d.get("cost_center"), d.get("remarks"),d.get("summary"),d.get("awb_no")
+			d.get("party_type"), d.get("party"), d.get("cost_center"), d.get("remarks"),d.get("summary")
 		]
 
 		result.append(row)
