@@ -110,7 +110,7 @@ def get_gl_entries(filters):
 			from `tabSales Invoice` s 
 			join `tabSales Invoice Item` on s.name=i.parent i 
 			where s.docstatus=1 
-			group by s.name) si on gl.voucher_no=si.name
+			group by s.name) si on gl.voucher_no=si.name 
 		where gl.company=%(company)s {conditions}
 		{group_by_condition}
 		order by gl.posting_date, gl.account"""\
