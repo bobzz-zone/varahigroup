@@ -101,7 +101,7 @@ def get_gl_entries(filters):
 
 	group_by_condition = "group by voucher_type, voucher_no, account, cost_center" \
 		if True else "group by name"
-	if filters.get("party_type")=="Customer":
+	if True or filters.get("party_type")=="Customer":
 		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
 				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no {select_fields}
@@ -116,7 +116,7 @@ def get_gl_entries(filters):
 			order by gl.posting_date, gl.account"""\
 			.format(select_fields=select_fields, conditions=get_conditions(filters),
 			group_by_condition=group_by_condition), filters, as_dict=1)
-	else:
+	#else:
 
 	return gl_entries
 
