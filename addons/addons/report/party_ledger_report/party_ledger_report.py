@@ -101,23 +101,22 @@ def get_gl_entries(filters):
 
 	group_by_condition = "group by voucher_type, voucher_no, account, cost_center" \
 		if True else "group by name"
-	if True or filters.get("party_type")=="Customer":
-		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
-				sum(gl.debit) as debit, sum(gl.credit) as credit,
-				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no {select_fields}
-			from `tabGL Entry` gl 
-			left join (select s.name,s.awb_no,group_concat(i.item_code,"(",i.product_code,") -> ",i.item_name," = ",.i.qty) as "summary" 
-				from `tabSales Invoice` s 
-				join `tabSales Invoice Item` on s.name=i.parent i 
-				where s.docstatus=1 
-				group by s.name) si on gl.voucher_no=si.name
-			where gl.company=%(company)s {conditions}
-			{group_by_condition}
-			order by gl.posting_date, gl.account"""\
-			.format(select_fields=select_fields, conditions=get_conditions(filters),
-			group_by_condition=group_by_condition), filters, as_dict=1)
+	#if True or filters.get("party_type")=="Customer":
+	gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
+			sum(gl.debit) as debit, sum(gl.credit) as credit,
+			gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no {select_fields}
+		from `tabGL Entry` gl 
+		left join (select s.name,s.awb_no,group_concat(i.item_code,"(",i.product_code,") -> ",i.item_name," = ",.i.qty) as "summary" 
+			from `tabSales Invoice` s 
+			join `tabSales Invoice Item` on s.name=i.parent i 
+			where s.docstatus=1 
+			group by s.name) si on gl.voucher_no=si.name
+		where gl.company=%(company)s {conditions}
+		{group_by_condition}
+		order by gl.posting_date, gl.account"""\
+		.format(select_fields=select_fields, conditions=get_conditions(filters),
+		group_by_condition=group_by_condition), filters, as_dict=1)
 	#else:
-
 	return gl_entries
 
 def get_conditions(filters):
