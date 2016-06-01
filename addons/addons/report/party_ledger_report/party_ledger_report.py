@@ -106,7 +106,7 @@ def get_gl_entries(filters):
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
 				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary {select_fields}
 			from `tabGL Entry` gl 
-			left join (select s.name,group_concat(i.item_code,"(",i.product_code,") -> ",i.item_name," = ",i.qty) as "summary" 
+			left join (select s.name,"tes" as "summary" 
 				from `tabSales Invoice` s 
 				join `tabSales Invoice Item` i on s.name=i.parent 
 				where s.docstatus=1 
