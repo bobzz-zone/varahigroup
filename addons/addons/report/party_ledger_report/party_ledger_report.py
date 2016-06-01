@@ -80,7 +80,7 @@ def get_columns(filters):
 	columns += [
 		_("Voucher Type") + "::120", _("Voucher No") + ":Dynamic Link/"+_("Voucher Type")+":160",
 		_("Against Account") + "::120", _("Party Type") + "::80", _("Party") + "::150",
-		_("Cost Center") + ":Link/Cost Center:100", _("Remarks") + "::400"
+		_("Cost Center") + ":Link/Cost Center:100", _("Remarks") + "::400" ,"Summary:Data:200","AWB No:Data:200"
 	]
 
 	return columns
@@ -95,22 +95,28 @@ def get_result(filters, account_details):
 	return result
 
 def get_gl_entries(filters):
-	select_fields = """, sum(debit_in_account_currency) as debit_in_account_currency,
-		sum(credit_in_account_currency) as credit_in_account_currency""" \
+	select_fields = """, sum(gl.debit_in_account_currency) as debit_in_account_currency,
+		sum(gl.credit_in_account_currency) as credit_in_account_currency""" \
 		if filters.get("show_in_account_currency") else ""
 
 	group_by_condition = "group by voucher_type, voucher_no, account, cost_center" \
 		if True else "group by name"
-
-	gl_entries = frappe.db.sql("""select posting_date, account, party_type, party,
-			sum(debit) as debit, sum(credit) as credit,
-			voucher_type, voucher_no, cost_center, remarks, against, is_opening {select_fields}
-		from `tabGL Entry`
-		where company=%(company)s {conditions}
-		{group_by_condition}
-		order by posting_date, account"""\
-		.format(select_fields=select_fields, conditions=get_conditions(filters),
+	if filters.get("party_type")=="Customer":
+		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
+				sum(gl.debit) as debit, sum(gl.credit) as credit,
+				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no {select_fields}
+			from `tabGL Entry` gl 
+			left join (select s.name,s.awb_no,group_concat(i.item_code,"(",i.product_code,") -> ",i.item_name," = ",.i.qty) as "summary" 
+				from `tabSales Invoice` s 
+				join `tabSales Invoice Item` on s.name=i.parent i 
+				where s.docstatus=1 
+				group by s.name) si on gl.voucher_no=si.name
+			where gl.company=%(company)s {conditions}
+			{group_by_condition}
+			order by gl.posting_date, gl.account"""\
+			.format(select_fields=select_fields, conditions=get_conditions(filters),
 			group_by_condition=group_by_condition), filters, as_dict=1)
+	else:
 
 	return gl_entries
 
@@ -122,16 +128,16 @@ def get_conditions(filters):
 			where lft>=%s and rgt<=%s and docstatus<2)""" % (lft, rgt))
 
 	if filters.get("voucher_no"):
-		conditions.append("voucher_no=%(voucher_no)s")
+		conditions.append("gl.voucher_no=%(voucher_no)s")
 
 	if filters.get("party_type"):
-		conditions.append("party_type=%(party_type)s")
+		conditions.append("gl.party_type=%(party_type)s")
 
 	if filters.get("party"):
-		conditions.append("party=%(party)s")
+		conditions.append("gl.party=%(party)s")
 
 	if not (filters.get("account") or filters.get("party") or filters.get("group_by_account")):
-		conditions.append("posting_date >=%(from_date)s")
+		conditions.append("gl.posting_date >=%(from_date)s")
 
 	from frappe.desk.reportview import build_match_conditions
 	match_conditions = build_match_conditions("GL Entry")
@@ -276,7 +282,7 @@ def get_result_as_list(data, filters):
 			row += [d.get("debit_in_account_currency"), d.get("credit_in_account_currency")]
 
 		row += [d.get("voucher_type"), d.get("voucher_no"), d.get("against"),
-			d.get("party_type"), d.get("party"), d.get("cost_center"), d.get("remarks")
+			d.get("party_type"), d.get("party"), d.get("cost_center"), d.get("remarks"),d.get("summary"),d.get("awb_no")
 		]
 
 		result.append(row)
