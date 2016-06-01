@@ -29,9 +29,6 @@ frappe.query_reports["Party Ledger Report"] = {
 		},
 		
 		{
-			"fieldtype": "Break",
-		},
-		{
 			"fieldname":"party_type",
 			"label": __("Party Type"),
 			"fieldtype": "Select",
