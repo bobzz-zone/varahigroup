@@ -80,7 +80,7 @@ def get_columns(filters):
 	columns += [
 		_("Voucher Type") + "::120", _("Voucher No") + ":Dynamic Link/"+_("Voucher Type")+":160",
 		_("Against Account") + "::120", _("Party Type") + "::80", _("Party") + "::150",
-		_("Cost Center") + ":Link/Cost Center:100", _("Remarks") + "::400" ,"Summary:Data:200"
+		_("Cost Center") + ":Link/Cost Center:100", _("Remarks") + "::400" ,"Summary:Data:200","AWB No:Data:200","Related To:Data:200","Delivery/Receipt:Dynamic Link/Related To:200"
 	]
 
 	return columns
@@ -104,9 +104,9 @@ def get_gl_entries(filters):
 	if filters.get("party_type")=="Customer":
 		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
-				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary {select_fields}
+				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no,"Delivery Note" as "type",si.delivery_note {select_fields}
 			from `tabGL Entry` gl 
-			left join (select s.name,group_concat(i.item_code,"(",ifnull(i.product_code,"no product code"),") - ",i.item_name," = ",i.qty) as "summary" from `tabSales Invoice` s join `tabSales Invoice Item` i on s.name=i.parent where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
+			left join (select s.name,i.delivery_note,s.awb_no,group_concat(i.item_code,if(isnull(i.product_code),"",concat(" -> ",i.product_code))," = ",format(i.qty,0)) as "summary" from `tabSales Invoice` s join `tabSales Invoice Item` i on s.name=i.parent where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
 			where gl.company=%(company)s {conditions}
 			{group_by_condition}
 			order by gl.posting_date, gl.account"""\
@@ -115,9 +115,9 @@ def get_gl_entries(filters):
 	else:
 		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
-				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary {select_fields}
+				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,"" as "awb_no","Purchase Receipt" as "type",si.purchase_receipt {select_fields}
 			from `tabGL Entry` gl 
-			left join (select s.name,group_concat(i.item_code,"(",ifnull(i.product_code,"no product code"),") - ",i.item_name," = ",i.qty) as "summary" from `tabPurchase Invoice` s join `tabPurchase Invoice Item` i on s.name=i.parent where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
+			left join (select s.name,i.purchase_receipt,group_concat(i.item_code,"(",if(isnull(i.product_code),"",concat(" -> ",i.product_code))," = ",format(i.qty,0)) as "summary" from `tabPurchase Invoice` s join `tabPurchase Invoice Item` i on s.name=i.parent where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
 			where gl.company=%(company)s {conditions}
 			{group_by_condition}
 			order by gl.posting_date, gl.account"""\
