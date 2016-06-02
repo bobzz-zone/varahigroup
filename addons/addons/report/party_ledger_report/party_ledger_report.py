@@ -104,7 +104,7 @@ def get_gl_entries(filters):
 	if filters.get("party_type")=="Customer":
 		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
-				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no,"Delivery Note" as "type",si.delivery_note {select_fields}
+				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no,"Delivery Note" as "type",si.delivery_note as "rt" {select_fields}
 			from `tabGL Entry` gl 
 			left join (select s.name,i.delivery_note,s.awb_no,group_concat(i.item_code,if(isnull(i.product_code),"",concat(" -> ",i.product_code))," = ",format(i.qty,0)) as "summary" from `tabSales Invoice` s join `tabSales Invoice Item` i on s.name=i.parent where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
 			where gl.company=%(company)s {conditions}
@@ -115,7 +115,7 @@ def get_gl_entries(filters):
 	else:
 		gl_entries = frappe.db.sql("""select gl.posting_date, gl.account, gl.party_type, gl.party,
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
-				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,"" as "awb_no","Purchase Receipt" as "type",si.purchase_receipt {select_fields}
+				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,"" as "awb_no","Purchase Receipt" as "type",si.purchase_receipt as "rt" {select_fields}
 			from `tabGL Entry` gl 
 			left join (select s.name,i.purchase_receipt,group_concat(i.item_code,"(",if(isnull(i.product_code),"",concat(" -> ",i.product_code))," = ",format(i.qty,0)) as "summary" from `tabPurchase Invoice` s join `tabPurchase Invoice Item` i on s.name=i.parent where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
 			where gl.company=%(company)s {conditions}
@@ -287,7 +287,7 @@ def get_result_as_list(data, filters):
 			row += [d.get("debit_in_account_currency"), d.get("credit_in_account_currency")]
 
 		row += [d.get("voucher_type"), d.get("voucher_no"), d.get("against"),
-			d.get("party_type"), d.get("party"), d.get("cost_center"), d.get("remarks"),d.get("summary")
+			d.get("party_type"), d.get("party"), d.get("cost_center"), d.get("remarks"),d.get("summary"),d.get("awb_no"),d.get("type"),d.get("rt")
 		]
 
 		result.append(row)
