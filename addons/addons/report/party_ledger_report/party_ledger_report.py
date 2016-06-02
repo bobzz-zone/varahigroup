@@ -106,7 +106,7 @@ def get_gl_entries(filters):
 				sum(gl.debit) as debit, sum(gl.credit) as credit,
 				gl.voucher_type, gl.voucher_no, gl.cost_center, gl.remarks, gl.against, gl.is_opening ,si.summary,si.awb_no,"Delivery Note" as "type",si.delivery_note as "rt" {select_fields}
 			from `tabGL Entry` gl 
-			left join (select s.name,i.delivery_note,s.awb_no,group_concat(i.item_code,if(isnull(i.product_code),"",concat(" -> ",i.product_code))," = ",format(i.qty,0)) as "summary" from `tabSales Invoice` s join `tabSales Invoice Item` i on s.name=i.parent where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
+			left join (select s.name,i.delivery_note,dn.awb_no,group_concat(i.item_code,if(isnull(i.product_code),"",concat(" -> ",i.product_code))," = ",format(i.qty,0)) as "summary" from `tabSales Invoice` s join `tabSales Invoice Item` i on s.name=i.parent left join `tabDelivery Note` dn on i.delivery_note=dn.name where s.docstatus=1 group by s.name) si on gl.voucher_no=si.name 
 			where gl.company=%(company)s {conditions}
 			{group_by_condition}
 			order by gl.posting_date, gl.account"""\
