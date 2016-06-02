@@ -33,8 +33,9 @@
 			{% } else { %}
 				<td></td>
 				<td></td>
-				<td></td>
+				
 				<td><b>{%= frappe.format(data[i][__("Account")], {fieldtype: "Link"}) || "&nbsp;" %}</b></td>
+				<td></td>
 				<td style="text-align: right">
 					{%= data[i][__("Account")] && format_currency(data[i][__("Debit")]) %}</td>
 				<td style="text-align: right">
