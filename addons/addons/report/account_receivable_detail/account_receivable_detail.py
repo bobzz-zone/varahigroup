@@ -195,7 +195,7 @@ class ReceivablePayableReport(object):
 
 		if party_type == "Customer":
 			for si in frappe.db.sql("""select si.name, si.due_date ,i.delivery_note as "dp",dn.awb_no,group_concat(i.item_code,if(isnull(i.product_code),concat(" -> ",i.item_name),concat(" -> ",i.product_code))," = ",format(i.qty,0)," ",i.stock_uom) as "summary" 
-				from `tabSales Invoice` si join `tabSales Invoice Item` i on s.name=i.parent left join `tabDelivery Note` dn on i.delivery_note=dn.name where si.docstatus=1""", as_dict=1):
+				from `tabSales Invoice` si join `tabSales Invoice Item` i on si.name=i.parent left join `tabDelivery Note` dn on i.delivery_note=dn.name where si.docstatus=1""", as_dict=1):
 					voucher_details.setdefault(si.name, si)
 
 		if party_type == "Supplier":
