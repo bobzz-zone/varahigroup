@@ -99,7 +99,7 @@ class ReceivablePayableReport(object):
 					due_date = voucher_details.get(gle.voucher_no, {}).get("due_date", "")
 					summary = voucher_details.get(gle.voucher_no, {}).get("summary", "")
 					awb_no=voucher_details.get(gle.voucher_no, {}).get("awb_no", "")
-					dp=voucher_details.get(gle.voucher_no, {}).get("due_date", "")
+					dp=voucher_details.get(gle.voucher_no, {}).get("dp", "")
 					row += [gle.voucher_type, gle.voucher_no,summary,awb_no,dp, due_date]
 
 					# get supplier bill details
@@ -198,8 +198,8 @@ class ReceivablePayableReport(object):
 					voucher_details.setdefault(si.name, si)
 
 		if party_type == "Supplier":
-			for pi in frappe.db.sql("""select name, due_date, bill_no, bill_date
-				from `tabPurchase Invoice` where docstatus=1""", as_dict=1):
+			for pi in frappe.db.sql("""select si.name, si.due_date, si.bill_no, si.bill_date,i.purchase_receipt as "dp","" as "awb_no",group_concat(i.item_code,if(isnull(i.product_code),concat(" -> ",i.item_name),concat(" -> ",i.product_code))," = ",format(i.qty,0)," ",i.uom) as "summary"
+				from `tabPurchase Invoice` si   join `tabPurchase Invoice Item` i on si.name=i.parent where si.docstatus=1 group by si.name""", as_dict=1):
 					voucher_details.setdefault(pi.name, pi)
 
 		return voucher_details
