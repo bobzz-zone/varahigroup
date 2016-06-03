@@ -3,7 +3,7 @@
 
 from __future__ import unicode_literals
 import frappe
-from addons.addons.report.accounts_receivable.accounts_receivable_detail import ReceivablePayableReport
+from addons.addons.report.accounts_receivable_detail.accounts_receivable_detail import ReceivablePayableReport
 
 def execute(filters=None):
 		args = {
