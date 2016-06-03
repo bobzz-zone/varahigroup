@@ -14,7 +14,8 @@ frappe.query_reports["Account Receivable Detail"] = {
 			"fieldname":"customer",
 			"label": __("Customer"),
 			"fieldtype": "Link",
-			"options": "Customer"
+			"options": "Customer",
+			"reqd":1
 		},
 		{
 			"fieldname":"report_date",

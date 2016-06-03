@@ -14,7 +14,8 @@ frappe.query_reports["Account Payable Detail"] = {
                         "fieldname":"supplier",
                         "label": __("Supplier"),
                         "fieldtype": "Link",
-                        "options": "Supplier"
+                        "options": "Supplier",
+                        "reqd":1
                 },
                 {
                         "fieldname":"report_date",
