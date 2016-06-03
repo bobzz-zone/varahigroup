@@ -1,258 +1,280 @@
-# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd.
 # License: GNU General Public License v3. See license.txt
 
 from __future__ import unicode_literals
 import frappe
-from frappe.utils import flt, getdate, cstr
-from frappe import _
-from erpnext.accounts.utils import get_account_currency
+from frappe import _, scrub
+from frappe.utils import getdate, nowdate, flt, cint
+
+class ReceivablePayableReport(object):
+	def __init__(self, filters=None):
+		self.filters = frappe._dict(filters or {})
+		self.filters.report_date = getdate(self.filters.report_date or nowdate())
+		self.age_as_on = getdate(nowdate()) \
+			if self.filters.report_date > getdate(nowdate()) \
+			else self.filters.report_date
+
+	def run(self, args):
+		party_naming_by = frappe.db.get_value(args.get("naming_by")[0], None, args.get("naming_by")[1])
+		return self.get_columns(party_naming_by, args), self.get_data(party_naming_by, args)
+
+	def get_columns(self, party_naming_by, args):
+		columns = [_("Posting Date") + ":Date:80", _(args.get("party_type")) + ":Link/" + args.get("party_type") + ":200"]
+
+		if party_naming_by == "Naming Series":
+			columns += [args.get("party_type") + " Name::110"]
+
+		columns += [_("Voucher Type") + "::110", _("Voucher No") + ":Dynamic Link/"+_("Voucher Type")+":120",
+			_("Due Date") + ":Date:80"]
+		columns += ["Summary:Data:300","AWB No:Data:200","Delivery/Receive:Data:200"]
+		if args.get("party_type") == "Supplier":
+			columns += [_("Bill No") + "::80", _("Bill Date") + ":Date:80"]
+
+		for label in ("Invoiced Amount", "Paid Amount", "Outstanding Amount"):
+			columns.append({
+				"label": label,
+				"fieldtype": "Currency",
+				"options": "currency",
+				"width": 120
+			})
+
+		columns += [_("Age (Days)") + ":Int:80"]
+
+		if not "range1" in self.filters:
+			self.filters["range1"] = "30"
+		if not "range2" in self.filters:
+			self.filters["range2"] = "60"
+		if not "range3" in self.filters:
+			self.filters["range3"] = "90"
+
+		for label in ("0-{range1}".format(**self.filters),
+			"{range1}-{range2}".format(**self.filters),
+			"{range2}-{range3}".format(**self.filters),
+			"{range3}-{above}".format(range3=self.filters.range3, above=_("Above"))):
+				columns.append({
+					"label": label,
+					"fieldtype": "Currency",
+					"options": "currency",
+					"width": 120
+				})
+
+		columns.append({
+			"fieldname": "currency",
+			"label": _("Currency"),
+			"fieldtype": "Data",
+			"width": 100
+		})
+		if args.get("party_type") == "Customer":
+			columns += [_("Territory") + ":Link/Territory:80"]
+		if args.get("party_type") == "Supplier":
+			columns += [_("Supplier Type") + ":Link/Supplier Type:80"]
+			
+		columns.append(_("Remarks") + "::200")
+		
+		return columns
+
+	def get_data(self, party_naming_by, args):
+		from erpnext.accounts.utils import get_currency_precision
+		currency_precision = get_currency_precision() or 2
+		dr_or_cr = "debit" if args.get("party_type") == "Customer" else "credit"
+
+		voucher_details = self.get_voucher_details(args.get("party_type"))
+
+		future_vouchers = self.get_entries_after(self.filters.report_date, args.get("party_type"))
+
+		company_currency = frappe.db.get_value("Company", self.filters.get("company"), "default_currency")
+
+		data = []
+		for gle in self.get_entries_till(self.filters.report_date, args.get("party_type")):
+			if self.is_receivable_or_payable(gle, dr_or_cr, future_vouchers):
+				outstanding_amount = self.get_outstanding_amount(gle, self.filters.report_date, dr_or_cr)
+				if abs(outstanding_amount) > 0.1/10**currency_precision:
+
+					row = [gle.posting_date, gle.party]
+
+					# customer / supplier name
+					if party_naming_by == "Naming Series":
+						row += [self.get_party_name(gle.party_type, gle.party)]
+
+					# get due date
+					due_date = voucher_details.get(gle.voucher_no, {}).get("due_date", "")
+					summary = voucher_details.get(gle.voucher_no, {}).get("summary", "")
+					awb_no=voucher_details.get(gle.voucher_no, {}).get("awb_no", "")
+					dp=voucher_details.get(gle.voucher_no, {}).get("due_date", "")
+					row += [gle.voucher_type, gle.voucher_no,summary,awb_no,dp, due_date]
+
+					# get supplier bill details
+					if args.get("party_type") == "Supplier":
+						row += [
+							voucher_details.get(gle.voucher_no, {}).get("bill_no", ""),
+							voucher_details.get(gle.voucher_no, {}).get("bill_date", "")
+						]
+
+					# invoiced and paid amounts
+					invoiced_amount = gle.get(dr_or_cr) if (gle.get(dr_or_cr) > 0) else 0
+					paid_amt = invoiced_amount - outstanding_amount
+					row += [invoiced_amount, paid_amt, outstanding_amount]
+
+					# ageing data
+					entry_date = due_date if self.filters.ageing_based_on == "Due Date" else gle.posting_date
+					row += get_ageing_data(cint(self.filters.range1), cint(self.filters.range2),
+						cint(self.filters.range3), self.age_as_on, entry_date, outstanding_amount)
+
+					if self.filters.get(scrub(args.get("party_type"))):
+						row.append(gle.account_currency)
+					else:
+						row.append(company_currency)
+
+					# customer territory / supplier type
+					if args.get("party_type") == "Customer":
+						row += [self.get_territory(gle.party)]
+					if args.get("party_type") == "Supplier":
+						row += [self.get_supplier_type(gle.party)]
+
+					row.append(gle.remarks)
+					data.append(row)
+
+		return data
+
+	def get_entries_after(self, report_date, party_type):
+		# returns a distinct list
+		return list(set([(e.voucher_type, e.voucher_no) for e in self.get_gl_entries(party_type)
+			if getdate(e.posting_date) > report_date]))
+
+	def get_entries_till(self, report_date, party_type):
+		# returns a generator
+		return (e for e in self.get_gl_entries(party_type)
+			if getdate(e.posting_date) <= report_date)
+
+	def is_receivable_or_payable(self, gle, dr_or_cr, future_vouchers):
+		return (
+			# advance
+			(not gle.against_voucher) or
+
+			# against sales order/purchase order
+			(gle.against_voucher_type in ["Sales Order", "Purchase Order"]) or
+
+			# sales invoice/purchase invoice
+			(gle.against_voucher==gle.voucher_no and gle.get(dr_or_cr) > 0) or
+
+			# entries adjusted with future vouchers
+			((gle.against_voucher_type, gle.against_voucher) in future_vouchers)
+		)
+
+	def get_outstanding_amount(self, gle, report_date, dr_or_cr):
+		payment_amount = 0.0
+		for e in self.get_gl_entries_for(gle.party, gle.party_type, gle.voucher_type, gle.voucher_no):
+			if getdate(e.posting_date) <= report_date and e.name!=gle.name:
+				payment_amount += (flt(e.credit if gle.party_type == "Customer" else e.debit) - flt(e.get(dr_or_cr)))
+
+		return flt(gle.get(dr_or_cr)) - flt(gle.credit if gle.party_type == "Customer" else gle.debit) - payment_amount
+
+	def get_party_name(self, party_type, party_name):
+		return self.get_party_map(party_type).get(party_name, {}).get("customer_name" if party_type == "Customer" else "supplier_name") or ""
+
+	def get_territory(self, party_name):
+		return self.get_party_map("Customer").get(party_name, {}).get("territory") or ""
+
+	def get_supplier_type(self, party_name):
+		return self.get_party_map("Supplier").get(party_name, {}).get("supplier_type") or ""
+
+	def get_party_map(self, party_type):
+		if not hasattr(self, "party_map"):
+			if party_type == "Customer":
+				self.party_map = dict(((r.name, r) for r in frappe.db.sql("""select {0}, {1}, {2} from `tab{3}`"""
+					.format("name", "customer_name", "territory", party_type), as_dict=True)))
+
+			elif party_type == "Supplier":
+				self.party_map = dict(((r.name, r) for r in frappe.db.sql("""select {0}, {1}, {2} from `tab{3}`"""
+					.format("name", "supplier_name", "supplier_type", party_type), as_dict=True)))
+
+		return self.party_map
+
+	def get_voucher_details(self, party_type):
+		voucher_details = frappe._dict()
+
+		if party_type == "Customer":
+			for si in frappe.db.sql("""select si.name, si.due_date ,i.delivery_note as "dp",dn.awb_no,group_concat(i.item_code,if(isnull(i.product_code),concat(" -> ",i.item_name),concat(" -> ",i.product_code))," = ",format(i.qty,0)," ",i.stock_uom) as "summary" 
+				from `tabSales Invoice` si join `tabSales Invoice Item` i on s.name=i.parent left join `tabDelivery Note` dn on i.delivery_note=dn.name where si.docstatus=1""", as_dict=1):
+					voucher_details.setdefault(si.name, si)
+
+		if party_type == "Supplier":
+			for pi in frappe.db.sql("""select name, due_date, bill_no, bill_date
+				from `tabPurchase Invoice` where docstatus=1""", as_dict=1):
+					voucher_details.setdefault(pi.name, pi)
+
+		return voucher_details
+
+	def get_gl_entries(self, party_type):
+		if not hasattr(self, "gl_entries"):
+			conditions, values = self.prepare_conditions(party_type)
+
+			if self.filters.get(scrub(party_type)):
+				select_fields = "debit_in_account_currency as debit, credit_in_account_currency as credit"
+			else:
+				select_fields = "debit, credit"
+
+			self.gl_entries = frappe.db.sql("""select name, posting_date, account, party_type, party,
+				voucher_type, voucher_no, against_voucher_type, against_voucher, account_currency, remarks, {0}
+				from `tabGL Entry`
+				where docstatus < 2 and party_type=%s and (party is not null and party != '') {1}
+				order by posting_date, party"""
+				.format(select_fields, conditions), values, as_dict=True)
+
+		return self.gl_entries
+
+	def prepare_conditions(self, party_type):
+		conditions = [""]
+		values = [party_type]
+
+		party_type_field = scrub(party_type)
+
+		if self.filters.company:
+			conditions.append("company=%s")
+			values.append(self.filters.company)
+
+		if self.filters.get(party_type_field):
+			conditions.append("party=%s")
+			values.append(self.filters.get(party_type_field))
+
+		return " and ".join(conditions), values
+
+	def get_gl_entries_for(self, party, party_type, against_voucher_type, against_voucher):
+		if not hasattr(self, "gl_entries_map"):
+			self.gl_entries_map = {}
+			for gle in self.get_gl_entries(party_type):
+				if gle.against_voucher_type and gle.against_voucher:
+					self.gl_entries_map.setdefault(gle.party, {})\
+						.setdefault(gle.against_voucher_type, {})\
+						.setdefault(gle.against_voucher, [])\
+						.append(gle)
+
+		return self.gl_entries_map.get(party, {})\
+			.get(against_voucher_type, {})\
+			.get(against_voucher, [])
 
 def execute(filters=None):
-	account_details = {}
-	for acc in frappe.db.sql("""select name, is_group from tabAccount""", as_dict=1):
-		account_details.setdefault(acc.name, acc)
-
-	validate_filters(filters, account_details)
-
-	validate_party(filters)
-
-	filters = set_account_currency(filters)
-
-	columns = get_columns(filters)
-
-	res = get_result(filters, account_details)
-
-	return columns, res
-
-def validate_filters(filters, account_details):
-	if filters.from_date > filters.to_date:
-		frappe.throw(_("From Date must be before To Date"))
-
-
-def validate_party(filters):
-	party_type, party = filters.get("party_type"), filters.get("party")
-
-	if party:
-		if not party_type:
-			frappe.throw(_("To filter based on Party, select Party Type first"))
-		elif not frappe.db.exists(party_type, party):
-			frappe.throw(_("Invalid {0}: {1}").format(party_type, party))
-
-def set_account_currency(filters):
-	if not (filters.get("account") or filters.get("party")):
-		return filters
-	else:
-		filters["company_currency"] = frappe.db.get_value("Company", filters.company, "default_currency")
-		account_currency = None
-
-		if filters.get("account"):
-			account_currency = get_account_currency(filters.account)
-		elif filters.get("party"):
-			gle_currency = frappe.db.get_value("GL Entry", {"party_type": filters.party_type,
-				"party": filters.party, "company": filters.company}, "account_currency")
-			if gle_currency:
-				account_currency = gle_currency
-			else:
-				account_currency = frappe.db.get_value(filters.party_type, filters.party, "default_currency")
-
-		filters["account_currency"] = account_currency or filters.company_currency
-
-		if filters.account_currency != filters.company_currency:
-			filters["show_in_account_currency"] = 1
-
-		return filters
-
-def get_columns(filters):
-	columns = [
-		_("Posting Date") + ":Date:90", _("Account") + ":Link/Account:200",
-		_("Debit") + ":Float:100", _("Credit") + ":Float:100"
-	]
-
-	if filters.get("show_in_account_currency"):
-		columns += [
-			_("Debit") + " (" + filters.account_currency + ")" + ":Float:100",
-			_("Credit") + " (" + filters.account_currency + ")" + ":Float:100"
-		]
-
-	columns += [
-		_("Voucher Type") + "::120", _("Voucher No") + ":Dynamic Link/"+_("Voucher Type")+":160",
-		_("Against Account") + "::120", _("Party Type") + "::80", _("Party") + "::150",
-		_("Cost Center") + ":Link/Cost Center:100", _("Remarks") + "::400"
-	]
-
-	return columns
-
-def get_result(filters, account_details):
-	gl_entries = get_gl_entries(filters)
-
-	data = get_data_with_opening_closing(filters, account_details, gl_entries)
-
-	result = get_result_as_list(data, filters)
-
-	return result
-
-def get_gl_entries(filters):
-	select_fields = """, sum(debit_in_account_currency) as debit_in_account_currency,
-		sum(credit_in_account_currency) as credit_in_account_currency""" \
-		if filters.get("show_in_account_currency") else ""
-
-	group_by_condition = "group by voucher_type, voucher_no, account, cost_center"
-
-	gl_entries = frappe.db.sql("""select posting_date, account, party_type, party,
-			sum(debit) as debit, sum(credit) as credit,
-			voucher_type, voucher_no, cost_center, remarks, against, is_opening {select_fields}
-		from `tabGL Entry`
-		where company=%(company)s {conditions}
-		{group_by_condition}
-		order by posting_date, account"""\
-		.format(select_fields=select_fields, conditions=get_conditions(filters),
-			group_by_condition=group_by_condition), filters, as_dict=1)
-
-	return gl_entries
-
-def get_conditions(filters):
-	conditions = []
-	if filters.get("account"):
-		lft, rgt = frappe.db.get_value("Account", filters["account"], ["lft", "rgt"])
-		conditions.append("""account in (select name from tabAccount
-			where lft>=%s and rgt<=%s and docstatus<2)""" % (lft, rgt))
-
-	if filters.get("party_type"):
-		conditions.append("party_type=%(party_type)s")
-
-	if filters.get("party"):
-		conditions.append("party=%(party)s")
-
-	if not (filters.get("account") or filters.get("party")):
-		conditions.append("posting_date >=%(from_date)s")
-
-	from frappe.desk.reportview import build_match_conditions
-	match_conditions = build_match_conditions("GL Entry")
-	if match_conditions: conditions.append(match_conditions)
-
-	return "and {}".format(" and ".join(conditions)) if conditions else ""
-
-def get_data_with_opening_closing(filters, account_details, gl_entries):
-	data = []
-	gle_map = initialize_gle_map(gl_entries)
-
-	opening, total_debit, total_credit, opening_in_account_currency, total_debit_in_account_currency, \
-		total_credit_in_account_currency, gle_map = get_accountwise_gle(filters, gl_entries, gle_map)
-
-	# Opening for filtered account
-	if filters.get("account") or filters.get("party"):
-		data += [get_balance_row(_("Opening"), opening, opening_in_account_currency), {}]
-
-	else:
-		for gl in gl_entries:
-			if gl.posting_date >= getdate(filters.from_date) and gl.posting_date <= getdate(filters.to_date) \
-					and gl.is_opening == "No":
-				data.append(gl)
-
-
-	# Total debit and credit between from and to date
-	if total_debit or total_credit:
-		data.append({
-			"account": "'" + _("Totals") + "'",
-			"debit": total_debit,
-			"credit": total_credit,
-			"debit_in_account_currency": total_debit_in_account_currency,
-			"credit_in_account_currency": total_credit_in_account_currency
-		})
-
-	# Closing for filtered account
-	if filters.get("account") or filters.get("party"):
-		closing = opening + total_debit - total_credit
-		closing_in_account_currency = opening_in_account_currency + \
-			total_debit_in_account_currency - total_credit_in_account_currency
-
-		data.append(get_balance_row(_("Closing (Opening + Totals)"),
-			closing, closing_in_account_currency))
-
-	return data
-
-def initialize_gle_map(gl_entries):
-	gle_map = frappe._dict()
-	for gle in gl_entries:
-		gle_map.setdefault(gle.account, frappe._dict({
-			"opening": 0,
-			"opening_in_account_currency": 0,
-			"entries": [],
-			"total_debit": 0,
-			"total_debit_in_account_currency": 0,
-			"total_credit": 0,
-			"total_credit_in_account_currency": 0,
-			"closing": 0,
-			"closing_in_account_currency": 0
-		}))
-	return gle_map
-
-def get_accountwise_gle(filters, gl_entries, gle_map):
-	opening, total_debit, total_credit = 0, 0, 0
-	opening_in_account_currency, total_debit_in_account_currency, total_credit_in_account_currency = 0, 0, 0
-
-	from_date, to_date = getdate(filters.from_date), getdate(filters.to_date)
-	for gle in gl_entries:
-		amount = flt(gle.debit, 3) - flt(gle.credit, 3)
-		amount_in_account_currency = flt(gle.debit_in_account_currency, 3) - flt(gle.credit_in_account_currency, 3)
-
-		if (filters.get("account") or filters.get("party") ) \
-				and (gle.posting_date < from_date or cstr(gle.is_opening) == "Yes"):
-
-			gle_map[gle.account].opening += amount
-			if filters.get("show_in_account_currency"):
-				gle_map[gle.account].opening_in_account_currency += amount_in_account_currency
-
-			if filters.get("account") or filters.get("party"):
-				opening += amount
-				if filters.get("show_in_account_currency"):
-					opening_in_account_currency += amount_in_account_currency
-
-		elif gle.posting_date <= to_date:
-			gle_map[gle.account].entries.append(gle)
-			gle_map[gle.account].total_debit += flt(gle.debit, 3)
-			gle_map[gle.account].total_credit += flt(gle.credit, 3)
-
-			total_debit += flt(gle.debit, 3)
-			total_credit += flt(gle.credit, 3)
-
-			if filters.get("show_in_account_currency"):
-				gle_map[gle.account].total_debit_in_account_currency += flt(gle.debit_in_account_currency, 3)
-				gle_map[gle.account].total_credit_in_account_currency += flt(gle.credit_in_account_currency, 3)
-
-				total_debit_in_account_currency += flt(gle.debit_in_account_currency, 3)
-				total_credit_in_account_currency += flt(gle.credit_in_account_currency, 3)
-
-	return opening, total_debit, total_credit, opening_in_account_currency, \
-		total_debit_in_account_currency, total_credit_in_account_currency, gle_map
-
-def get_balance_row(label, balance, balance_in_account_currency=None):
-	balance_row = {
-		"account": "'" + label + "'",
-		"debit": balance if balance > 0 else 0,
-		"credit": -1*balance if balance < 0 else 0
+	args = {
+		"party_type": "Customer",
+		"naming_by": ["Selling Settings", "cust_master_name"],
 	}
+	return ReceivablePayableReport(filters).run(args)
 
-	if balance_in_account_currency != None:
-		balance_row.update({
-			"debit_in_account_currency": balance_in_account_currency if balance_in_account_currency > 0 else 0,
-			"credit_in_account_currency": -1*balance_in_account_currency if balance_in_account_currency < 0 else 0
-		})
+def get_ageing_data(first_range, second_range, third_range, age_as_on, entry_date, outstanding_amount):
+	# [0-30, 30-60, 60-90, 90-above]
+	outstanding_range = [0.0, 0.0, 0.0, 0.0]
 
-	return balance_row
+	if not (age_as_on and entry_date):
+		return [0] + outstanding_range
 
-def get_result_as_list(data, filters):
-	result = []
-	for d in data:
-		row = [d.get("posting_date"), d.get("account"), d.get("debit"), d.get("credit")]
+	age = (getdate(age_as_on) - getdate(entry_date)).days or 0
+	index = None
+	for i, days in enumerate([first_range, second_range, third_range]):
+		if age <= days:
+			index = i
+			break
 
-		if filters.get("show_in_account_currency"):
-			row += [d.get("debit_in_account_currency"), d.get("credit_in_account_currency")]
+	if index is None: index = 3
+	outstanding_range[index] = outstanding_amount
 
-		row += [d.get("voucher_type"), d.get("voucher_no"), d.get("against"),
-			d.get("party_type"), d.get("party"), d.get("cost_center"), d.get("remarks")
-		]
-
-		result.append(row)
-
-	return result
+	return [age] + outstanding_range
