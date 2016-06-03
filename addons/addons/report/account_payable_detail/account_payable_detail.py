@@ -3,7 +3,11 @@
 
 from __future__ import unicode_literals
 import frappe
+from addons.addons.report.accounts_receivable.accounts_receivable_detail import ReceivablePayableReport
 
 def execute(filters=None):
-	columns, data = [], []
-	return columns, data
+		args = {
+				"party_type": "Supplier",
+				"naming_by": ["Buying Settings", "supp_master_name"],
+		}
+		return ReceivablePayableReport(filters).run(args)
