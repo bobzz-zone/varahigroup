@@ -30,8 +30,9 @@
 					<td>{%= dateutil.str_to_user(data[i][__("Posting Date")]) %}</td>
 					<td>{%= data[i][__("Voucher Type")] %}
 						<br>{%= data[i][__("Voucher No")] %}</td>
-					<td>{%= data[i][__("Customer Name")] || data[i][__("Customer")] || data[i][__("Supplier Name")] || data[i][__("Supplier")] %}
-						<br>{%= __("Remarks") %}: {%= data[i][__("Remarks")] %}</td>
+					<td>{%= data[i][__("Delivery/Receive")] %}</td>
+					<td>{%= data[i][__("Summary")] %}</td>
+					<td>{%= data[i][__("AWB No")] %}</td>
 					<td style="text-align: right">
 						{%= format_currency(data[i][__("Invoiced Amount")], data[i]["currency"]) %}</td>
 					<td style="text-align: right">
