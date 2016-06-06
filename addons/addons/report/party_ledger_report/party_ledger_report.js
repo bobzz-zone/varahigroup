@@ -39,7 +39,7 @@ frappe.query_reports["Party Ledger Report"] = {
 			"fieldname":"party",
 			"label": __("Party"),
 			"fieldtype": "Dynamic Link",
-			"reqd":1,
+			"reqd":0,
 			"get_options": function() {
 				var party_type = frappe.query_report.filters_by_name.party_type.get_value();
 				var party = frappe.query_report.filters_by_name.party.get_value();
